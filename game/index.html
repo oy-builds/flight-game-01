@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ridge Runner — Tern Island Courier</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a1420;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #eef4fa; }
+  #game-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; display: none; z-index: 5; }
+  .panel { background: rgba(8, 16, 28, 0.72); border: 1px solid rgba(140, 200, 255, 0.35);
+    border-radius: 10px; padding: 10px 14px; backdrop-filter: blur(2px);
+    box-shadow: 0 0 18px rgba(60, 160, 255, 0.18), inset 0 0 24px rgba(40, 120, 220, 0.10); }
+  .label { font-size: 10px; letter-spacing: 0.18em; color: #8fc3ff; text-transform: uppercase; }
+  .big { font-size: 34px; font-weight: 700; line-height: 1.05; color: #fff;
+    text-shadow: 0 0 12px rgba(120, 200, 255, 0.8); font-variant-numeric: tabular-nums; }
+  .unit { font-size: 12px; color: #9fc6ee; margin-left: 4px; }
+  #hud-left { position: absolute; top: 16px; left: 16px; display: flex; gap: 12px; }
+  #hud-right { position: absolute; top: 16px; right: 16px; display: flex; gap: 12px; text-align: right; }
+  #hud-compass-wrap { position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+    text-align: center; }
+  #hud-compass { width: 360px; height: 30px; border-radius: 6px; border: 1px solid rgba(140,200,255,0.35); }
+  #hud-heading { font-size: 20px; font-weight: 700; color: #ffd23f; text-shadow: 0 0 10px rgba(255,210,63,0.7); }
+  #hud-mission { position: absolute; top: 84px; left: 50%; transform: translateX(-50%);
+    text-align: center; }
+  #hud-mission-name { font-size: 13px; letter-spacing: 0.22em; color: #ffd23f; font-weight: 700; }
+  #hud-objective { font-size: 15px; color: #eaf3ff; margin-top: 2px; text-shadow: 0 1px 4px #000; }
+  #hud-ring-dist { font-size: 12px; color: #9fe8b0; margin-top: 2px; letter-spacing: 0.1em; }
+  #hud-score-box { position: absolute; top: 84px; right: 16px; text-align: right; }
+  #hud-bottom-left { position: absolute; left: 16px; bottom: 16px; display: flex; gap: 12px; align-items: flex-end; }
+  #hud-attitude { width: 132px; height: 132px; border-radius: 50%; background: rgba(8,16,28,0.72);
+    border: 1px solid rgba(140,200,255,0.35); }
+  #hud-bottom-right { position: absolute; right: 16px; bottom: 16px; width: 220px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .bar-row .label { width: 64px; text-align: right; }
+  .bar { flex: 1; height: 12px; background: rgba(255,255,255,0.12); border-radius: 6px; overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 6px; transition: width 0.12s linear; }
+  #hud-throttle-fill { background: linear-gradient(90deg, #2f9e5f, #7ee2a8); width: 0%; }
+  #hud-fuel-fill { background: linear-gradient(90deg, #e8a13a, #ffd23f); width: 100%; }
+  #hud-fuel-fill.low { background: linear-gradient(90deg, #c0392b, #ff6b5e); }
+  #hud-gear, #hud-flaps { font-size: 11px; letter-spacing: 0.14em; color: #9fe8b0; }
+  #hud-gear.warn { color: #ff8a7a; }
+  #hud-warn { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%);
+    color: #ff6b5e; font-weight: 700; letter-spacing: 0.14em; font-size: 16px;
+    text-shadow: 0 0 14px rgba(255, 60, 40, 0.8); display: none; }
+  #hud-message { position: absolute; left: 50%; top: 38%; transform: translateX(-50%);
+    font-size: 22px; font-weight: 700; color: #fff; text-shadow: 0 2px 10px #000, 0 0 24px rgba(120,200,255,0.7);
+    display: none; text-align: center; white-space: nowrap; }
+  #hud-paused { position: absolute; left: 50%; top: 46%; transform: translateX(-50%);
+    font-size: 26px; font-weight: 700; letter-spacing: 0.3em; color: #ffd23f; display: none; }
+
+  /* ---------- Screens ---------- */
+  .screen { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: linear-gradient(180deg, rgba(6,12,22,0.25) 0%, rgba(6,12,22,0.55) 78%, rgba(6,12,22,0.82) 100%); }
+  .screen h1 { font-size: 64px; font-weight: 800; letter-spacing: 0.06em; color: #fff;
+    text-shadow: 0 4px 30px rgba(0,0,0,0.7), 0 0 60px rgba(90,170,255,0.55); }
+  .screen h1 .accent { color: #ffd23f; }
+  .screen h2 { font-size: 19px; font-weight: 500; letter-spacing: 0.34em; color: #bcd9f5;
+    margin-top: 6px; text-transform: uppercase; }
+  .screen p.tag { margin-top: 14px; font-size: 16px; color: #dbe9f8; max-width: 620px; line-height: 1.5; }
+  .missions { display: flex; gap: 16px; margin-top: 30px; }
+  .mission-card { width: 240px; padding: 18px 16px; border-radius: 12px; cursor: pointer;
+    background: rgba(10, 20, 36, 0.78); border: 2px solid rgba(140,200,255,0.3);
+    transition: transform 0.12s ease, border-color 0.12s ease; pointer-events: auto; }
+  .mission-card:hover { transform: translateY(-3px); border-color: #ffd23f; }
+  .mission-card.selected { border-color: #ffd23f; box-shadow: 0 0 22px rgba(255,210,63,0.35); }
+  .mission-card h3 { font-size: 19px; color: #ffd23f; margin-bottom: 6px; }
+  .mission-card p { font-size: 13px; line-height: 1.45; color: #cfe2f5; }
+  .mission-card .key { display: inline-block; margin-top: 10px; font-size: 11px; color: #8fc3ff;
+    border: 1px solid rgba(140,200,255,0.5); border-radius: 4px; padding: 2px 7px; }
+  .btn { pointer-events: auto; margin-top: 28px; padding: 13px 42px; font-size: 17px; font-weight: 700;
+    letter-spacing: 0.12em; color: #10233a; background: linear-gradient(180deg, #ffd94d, #f5b81e);
+    border: none; border-radius: 9px; cursor: pointer; box-shadow: 0 4px 22px rgba(255,200,50,0.45); }
+  .btn:hover { filter: brightness(1.08); }
+  .btn.ghost { background: transparent; color: #cfe2f5; border: 1px solid rgba(180,210,240,0.5);
+    box-shadow: none; font-size: 14px; padding: 10px 26px; }
+  .controls-line { margin-top: 26px; font-size: 13px; color: #9fb8d4; line-height: 1.7; }
+  .controls-line b { color: #eaf3ff; }
+  #screen-over h1 { font-size: 46px; }
+  #over-text { margin-top: 14px; font-size: 19px; color: #fff; max-width: 640px; line-height: 1.5; }
+  #screen-help { display: none; }
+  .help-table { margin-top: 22px; text-align: left; font-size: 15px; line-height: 2; color: #dbe9f8; }
+  .help-table b { color: #ffd23f; display: inline-block; min-width: 210px; }
+  .corner { position: fixed; z-index: 6; bottom: 12px; left: 50%; transform: translateX(-50%);
+    font-size: 11px; color: rgba(220,235,250,0.65); letter-spacing: 0.08em; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="game-canvas"></canvas>
+
+<!-- ============ HUD ============ -->
+<div id="hud">
+  <div id="hud-left">
+    <div class="panel"><div class="label">Airspeed</div><div><span class="big" id="hud-airspeed">0</span><span class="unit">KT</span></div></div>
+    <div class="panel"><div class="label">Altitude</div><div><span class="big" id="hud-alt">0</span><span class="unit">FT</span></div>
+      <div style="font-size:12px;color:#9fc6ee;margin-top:2px">V/S <span id="hud-vspeed">+0</span> FT/MIN</div></div>
+  </div>
+  <div id="hud-right">
+    <div class="panel"><div class="label">Score</div><div><span class="big" id="hud-score">0</span></div></div>
+    <div class="panel"><div class="label">Time</div><div><span class="big" id="hud-timer">—</span></div></div>
+  </div>
+  <div id="hud-compass-wrap">
+    <canvas id="hud-compass" width="360" height="30"></canvas>
+    <div><span id="hud-heading">090</span>°</div>
+  </div>
+  <div id="hud-mission">
+    <div id="hud-mission-name">RING RUN</div>
+    <div id="hud-objective">Ring 1 of 8 — follow the gold ring</div>
+    <div id="hud-ring-dist"></div>
+  </div>
+  <div id="hud-bottom-left">
+    <canvas id="hud-attitude" width="132" height="132"></canvas>
+    <div class="panel">
+      <div><span id="hud-gear">GEAR DOWN</span> &nbsp;<span id="hud-flaps"></span></div>
+      <div style="font-size:11px;color:#8fc3ff;margin-top:6px;letter-spacing:0.14em">G GEAR · F FLAPS · SPACE BRAKE</div>
+    </div>
+  </div>
+  <div id="hud-bottom-right" class="panel">
+    <div class="bar-row"><span class="label">Throttle</span><div class="bar"><div id="hud-throttle-fill"></div></div></div>
+    <div class="bar-row"><span class="label">Fuel</span><div class="bar"><div id="hud-fuel-fill"></div></div><span id="hud-fuel-text" style="font-size:12px;width:34px">100%</span></div>
+  </div>
+  <div id="hud-warn"></div>
+  <div id="hud-message"></div>
+  <div id="hud-paused">PAUSED — P TO RESUME</div>
+</div>
+
+<!-- ============ Title ============ -->
+<div id="screen-title" class="screen">
+  <h1>RIDGE <span class="accent">RUNNER</span></h1>
+  <h2>Tern Island Courier</h2>
+  <p class="tag">Fly the Kestrel K-2 over Tern Island — thread the gold rings, round the
+    lighthouse, and grease your landings on runway 09. Watch the fuel, mind the stall,
+    and bring her home.</p>
+  <div class="missions">
+    <div class="mission-card selected" data-mission="rings">
+      <h3>Ring Run</h3>
+      <p>Thread all 8 gold rings around the island before the clock runs out. Each ring pays points and fuel.</p>
+      <span class="key">PRESS 1</span>
+    </div>
+    <div class="mission-card" data-mission="hop">
+      <h3>Island Hop</h3>
+      <p>Take off from Tern Field, round the lighthouse beacon, and land back on runway 09.</p>
+      <span class="key">PRESS 2</span>
+    </div>
+    <div class="mission-card" data-mission="free">
+      <h3>Free Flight</h3>
+      <p>No clock, no course. Learn the island, buzz the beach, practise your landings.</p>
+      <span class="key">PRESS 3</span>
+    </div>
+  </div>
+  <button class="btn" id="btn-fly">FLY THE SELECTED SORTIE</button>
+  <div class="controls-line">
+    <b>W/S</b> throttle &nbsp;·&nbsp; <b>Arrow keys</b> pitch &amp; bank &nbsp;·&nbsp; <b>Mouse</b> steer &nbsp;·&nbsp;
+    <b>G</b> gear &nbsp;·&nbsp; <b>F</b> flaps &nbsp;·&nbsp; <b>Space</b> brake &nbsp;·&nbsp; <b>P</b> pause &nbsp;·&nbsp; <b>M</b> mute
+  </div>
+  <button class="btn ghost" id="btn-help">HOW TO FLY</button>
+  <button class="btn ghost" id="btn-mute" style="margin-top:10px">SOUND: ON</button>
+</div>
+
+<!-- ============ Sortie over ============ -->
+<div id="screen-over" class="screen" style="display:none">
+  <h1 id="over-title">SORTIE COMPLETE</h1>
+  <p id="over-text"></p>
+  <button class="btn" id="btn-again">FLY AGAIN (R)</button>
+  <button class="btn ghost" id="btn-title">BACK TO TITLE</button>
+</div>
+
+<!-- ============ Help ============ -->
+<div id="screen-help" class="screen">
+  <h1 style="font-size:40px">HOW TO FLY</h1>
+  <div class="help-table">
+    <div><b>W / S or Shift / Ctrl</b> Throttle up / down</div>
+    <div><b>Arrow Up / Down</b> Nose up / nose down</div>
+    <div><b>Arrow Left / Right</b> Bank left / bank right — bank turns you</div>
+    <div><b>Mouse</b> Steer gently by moving the pointer</div>
+    <div><b>G</b> Landing gear up / down</div>
+    <div><b>F</b> Flaps — slower, steadier landings</div>
+    <div><b>Space</b> Airbrake on the runway</div>
+    <div><b>Stall</b> Below 55 knots the wing stops lifting — nose down, throttle up</div>
+    <div><b>Landing</b> Gear down, slow, wings level, on the runway, gentle descent</div>
+    <div><b>R</b> Restart &nbsp;·&nbsp; <b>P</b> Pause &nbsp;·&nbsp; <b>M</b> Mute &nbsp;·&nbsp; <b>H</b> Help</div>
+  </div>
+  <button class="btn" id="btn-help-close">BACK</button>
+</div>
+
+<div class="corner">RIDGE RUNNER · TERN ISLAND COURIER · AN ORIGINAL GAME — NO NETWORK, NO TRACKING</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
